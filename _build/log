@@ -1,0 +1,6 @@
+# dune init proj cpu8086
+# OCAMLPARAM: unset
+# Shared cache: disabled
+# Shared cache location: /home/stheso/.cache/dune/db
+# Workspace root: /home/stheso/programming/perfaware/cpu8086/cpu8086
+# Auto-detected concurrency: 24
