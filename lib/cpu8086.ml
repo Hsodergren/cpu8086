@@ -1,4 +1,3 @@
-
 module ByteStream = struct
   type t = {
     buf : Bytes.t;
@@ -80,7 +79,7 @@ module Inst = struct
   let reg_addr w reg =
     let table = if w then mod11_regw1_table else mod11_regw0_table in
     Register table.(reg)
-    
+
 
   let get_displacement stream mod' w reg =
     if mod' = 3 then
@@ -106,7 +105,7 @@ module Inst = struct
       if d
       then Mov {src=r2; dst=r1}
       else Mov {src=r1; dst=r2}
-    else if (b1 land 0b11111110) lxor 0b11000110 = 0 then 
+    else if (b1 land 0b11111110) lxor 0b11000110 = 0 then
       let b2 = ByteStream.take1 stream in
       let w = b1 land 0b00000001 > 0 in
       let mod' = (b2 land 0b11000000) lsr 6 in
@@ -119,7 +118,7 @@ module Inst = struct
       let reg = b1 land 0b00000111 |> reg_addr w in
       let value = displacement stream (if w then 2 else 1) in
       Mov {dst=reg; src=Immediate value}
-    else begin 
+    else begin
       failwith "unknown opcode"
     end
 
@@ -163,7 +162,7 @@ module Inst = struct
     in
     loop loc;
     Buffer.to_bytes buf |> Bytes.to_string
-    
+
   let to_string = function
     | Mov {src;dst} ->
       let buf = Buffer.create 0 in
@@ -173,11 +172,3 @@ module Inst = struct
       Buffer.add_string buf (location_to_string src);
       Buffer.to_bytes buf |> String.of_bytes
 end
-  
-  
-  
-
-  
-
-
-
