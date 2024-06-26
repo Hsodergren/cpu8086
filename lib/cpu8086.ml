@@ -77,10 +77,20 @@ module Inst = struct
     | 7 -> Plus (Register (B X), Address displ)
     | _ -> assert false
 
-  let reg_addr w r =
+  let reg_addr w reg =
     let table = if w then mod11_regw1_table else mod11_regw0_table in
-    Register table.(r)
+    Register table.(reg)
     
+
+  let get_displacement stream mod' w reg =
+    if mod' = 3 then
+      reg_addr w reg
+    else if reg = 0b110 && mod' = 0 then
+      let address = displacement stream 2 in
+      Address address
+    else
+      let displ = displacement stream mod' in
+      f reg displ
 
   let parse stream =
     let b1 = ByteStream.take1 stream in
@@ -92,16 +102,18 @@ module Inst = struct
       let reg  = (b2 land 0b00111000) lsr 3 in
       let r'm  = b2 land 0b00000111 in
       let reg = reg_addr w reg in
-      let r1,r2 =
-        if mod' = 3 then
-          reg, reg_addr w r'm
-        else
-          let displ = displacement stream mod' in
-          reg, f r'm displ
-      in
+      let r1,r2 = reg, get_displacement stream mod' w r'm in
       if d
       then Mov {src=r2; dst=r1}
       else Mov {src=r1; dst=r2}
+    else if (b1 land 0b11111110) lxor 0b11000110 = 0 then 
+      let b2 = ByteStream.take1 stream in
+      let w = b1 land 0b00000001 > 0 in
+      let mod' = (b2 land 0b11000000) lsr 6 in
+      let r'm  = b2 land 0b00000111 in
+      let dst = get_displacement stream mod' w r'm in
+      let src = Immediate (displacement stream (if w then 2 else 1)) in
+      Mov {dst;src}
     else if (b1 land 0b11110000) lxor 0b10110000 = 0 then
       let w = b1 land 0b00001000 > 0 in
       let reg = b1 land 0b00000111 |> reg_addr w in
@@ -143,10 +155,10 @@ module Inst = struct
     let loop loc =
       match loc with
       | Immediate _ | Register _ as v -> to_string v
-      | Address _ | Plus _ as v->
-        Buffer.add_string buf "[ ";
+      | Address _ | Plus _ as v ->
+        Buffer.add_char buf '[';
         to_string v;
-        Buffer.add_string buf " ]"
+        Buffer.add_char buf ']'
 
     in
     loop loc;
