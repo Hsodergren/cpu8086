@@ -20,10 +20,14 @@ module ByteStream = struct
       );
     of_bytes @@  Buffer.to_bytes buf
 
-  let take1 t =
+  let take1 ?(signed=true) t =
     if t.pos < Bytes.length t.buf
     then begin
-      let res = Bytes.get_uint8 t.buf t.pos in
+      let res =
+        if signed 
+        then Bytes.get_int8 t.buf t.pos
+        else Bytes.get_uint8 t.buf t.pos
+      in
       t.pos <- t.pos + 1;
       res
     end else
@@ -31,7 +35,7 @@ module ByteStream = struct
 
   let take t n =
     let buf = Bytes.create n in
-    if t.pos + n < Bytes.length t.buf
+    if t.pos + n <= Bytes.length t.buf
     then begin
       Bytes.blit t.buf t.pos buf 0 n;
       t.pos <- t.pos + n;
@@ -47,7 +51,7 @@ module Inst = struct
 
   type location = Register of register
                 | Address of int
-                | Immediate of int
+                | Immediate of (int * bool)
                 | Plus of location * location
 
   let mod11_regw0_table = [|A L; C L; D L; B L; A H; C H; D H; B H|]
@@ -92,7 +96,7 @@ module Inst = struct
       f reg displ
 
   let parse stream =
-    let b1 = ByteStream.take1 stream in
+    let b1 = ByteStream.take1 ~signed:false stream in
     if (b1 land 0b11111100) lxor 0b10001000 = 0 then
       let b2 = ByteStream.take1 stream in
       let d = b1 land 0b00000010 > 0 in
@@ -111,16 +115,23 @@ module Inst = struct
       let mod' = (b2 land 0b11000000) lsr 6 in
       let r'm  = b2 land 0b00000111 in
       let dst = get_displacement stream mod' w r'm in
-      let src = Immediate (displacement stream (if w then 2 else 1)) in
+      let src = Immediate (displacement stream (if w then 2 else 1), w) in
       Mov {dst;src}
     else if (b1 land 0b11110000) lxor 0b10110000 = 0 then
       let w = b1 land 0b00001000 > 0 in
       let reg = b1 land 0b00000111 |> reg_addr w in
       let value = displacement stream (if w then 2 else 1) in
-      Mov {dst=reg; src=Immediate value}
-    else begin
+      Mov {dst=reg; src=Immediate (value,w)}
+    else if (b1 land 0b11111110) lxor 0b10100000 = 0 then
+      let w = b1 land 0b00000001 > 0 in
+      let data = displacement stream (if w then 2 else 1) in
+      Mov {dst=Register (A X); src=Address data}
+    else if (b1 land 0b11111110) lxor 0b10100010 = 0 then
+      let w = b1 land 0b00000001 > 0 in
+      let data = displacement stream (if w then 2 else 1) in
+      Mov {dst=Address data; src=Register (A X)};
+    else
       failwith "unknown opcode"
-    end
 
   let add_size buf = function
     | L -> Buffer.add_char buf 'l'
@@ -140,12 +151,19 @@ module Inst = struct
   let location_to_string loc =
     let buf = Buffer.create 0 in
     let rec to_string = function
-      | Immediate value -> Buffer.add_string buf (string_of_int value)
+      | Immediate (value, _) ->
+        Buffer.add_string buf (string_of_int value)
       | Register reg -> add_reg buf reg
       | Address addr ->
         Buffer.add_string buf (string_of_int addr);
       | Plus (l1,Address 0) ->
         to_string l1
+      | Plus (l1, Address value) ->
+        to_string l1;
+        (if value > 0
+        then Buffer.add_string buf " + "
+        else Buffer.add_string buf " - ");
+        to_string (Address (abs value))
       | Plus (l1,l2) ->
         to_string l1;
         Buffer.add_string buf " + ";
@@ -169,6 +187,9 @@ module Inst = struct
       Buffer.add_string buf "mov ";
       Buffer.add_string buf (location_to_string dst);
       Buffer.add_string buf ", ";
+      (match dst,src with
+      | Plus _, Immediate (_,w) -> Buffer.add_string buf (if w then "word " else "byte ")
+      | _ -> ());
       Buffer.add_string buf (location_to_string src);
       Buffer.to_bytes buf |> String.of_bytes
 end
