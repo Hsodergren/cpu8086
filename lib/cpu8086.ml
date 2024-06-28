@@ -58,14 +58,19 @@ module Inst = struct
   let mod11_regw1_table = [|A X; C X; D X; B X; SP; BP; SI; DI|]
 
   type t = Mov of { dst : location; src : location }
+         | Add of { dst : location; src : location }
+         | Sub of { dst : location; src : location }
+         | Cmp of { dst : location; src : location }
 
-  let displacement stream = function
+  let displacement ~signed stream = function
     | 0 -> 0
     | 1 ->
-      ByteStream.take1 stream
+      ByteStream.take1 ~signed:false stream
     | 2 ->
       let bytes = ByteStream.take stream 2 in
-      Bytes.get_uint16_ne bytes 0
+      if signed
+      then Bytes.get_uint16_ne bytes 0
+      else Bytes.get_int16_ne bytes 0
     | _ -> assert false
 
   let f r'm displ =
@@ -89,47 +94,80 @@ module Inst = struct
     if mod' = 3 then
       reg_addr w reg
     else if reg = 0b110 && mod' = 0 then
-      let address = displacement stream 2 in
+      let address = displacement ~signed:true stream 2 in
       Address address
     else
-      let displ = displacement stream mod' in
+      let displ = displacement ~signed:true stream mod' in
       f reg displ
 
-  let parse stream =
-    let b1 = ByteStream.take1 ~signed:false stream in
-    if (b1 land 0b11111100) lxor 0b10001000 = 0 then
+  let mem_to_from_reg b1 stream = 
       let b2 = ByteStream.take1 stream in
-      let d = b1 land 0b00000010 > 0 in
       let w = b1 land 0b00000001 > 0 in
+      let d = b1 land 0b00000010 > 0 in
       let mod' = (b2 land 0b11000000) lsr 6 in
       let reg  = (b2 land 0b00111000) lsr 3 in
       let r'm  = b2 land 0b00000111 in
       let reg = reg_addr w reg in
-      let r1,r2 = reg, get_displacement stream mod' w r'm in
+      let r'm = get_displacement stream mod' w r'm in
       if d
-      then Mov {src=r2; dst=r1}
-      else Mov {src=r1; dst=r2}
+      then reg, r'm
+      else r'm, reg
+
+  let imm_to_reg_or_mem b1 stream =
+    let b2 = ByteStream.take1 stream in
+    let w = b1 land 0b00000001 > 0 in
+    let s = not (b1 land 0b00000010 > 0) in
+    let mod' = (b2 land 0b11000000) lsr 6 in
+    let r'm  = b2 land 0b00000111 in
+    let dst = get_displacement stream mod' w r'm in
+    let src = Immediate (displacement ~signed:false stream  (if s && w then 2 else 1), w) in
+    dst, src, b2
+      
+  let parse stream =
+    let b1 = ByteStream.take1 ~signed:false stream in
+    if (b1 land 0b11111100) lxor 0b10001000 = 0 then
+      let dst, src = mem_to_from_reg b1 stream in
+      Mov {dst;src}
     else if (b1 land 0b11111110) lxor 0b11000110 = 0 then
-      let b2 = ByteStream.take1 stream in
-      let w = b1 land 0b00000001 > 0 in
-      let mod' = (b2 land 0b11000000) lsr 6 in
-      let r'm  = b2 land 0b00000111 in
-      let dst = get_displacement stream mod' w r'm in
-      let src = Immediate (displacement stream (if w then 2 else 1), w) in
+      let dst,src,_ = imm_to_reg_or_mem b1 stream in
       Mov {dst;src}
     else if (b1 land 0b11110000) lxor 0b10110000 = 0 then
       let w = b1 land 0b00001000 > 0 in
       let reg = b1 land 0b00000111 |> reg_addr w in
-      let value = displacement stream (if w then 2 else 1) in
+      let value = displacement ~signed:true stream (if w then 2 else 1) in
       Mov {dst=reg; src=Immediate (value,w)}
     else if (b1 land 0b11111110) lxor 0b10100000 = 0 then
       let w = b1 land 0b00000001 > 0 in
-      let data = displacement stream (if w then 2 else 1) in
+      let data = displacement ~signed:true stream (if w then 2 else 1) in
       Mov {dst=Register (A X); src=Address data}
     else if (b1 land 0b11111110) lxor 0b10100010 = 0 then
       let w = b1 land 0b00000001 > 0 in
-      let data = displacement stream (if w then 2 else 1) in
+      let data = displacement ~signed:true stream (if w then 2 else 1) in
       Mov {dst=Address data; src=Register (A X)};
+    else if (b1 land 0b11000100) lxor 0 = 0 then 
+      let op = (b1 land 0b00111000) lsr 3 in
+      let dst,src = mem_to_from_reg b1 stream in
+      match op with
+      | 0 -> Add {dst;src}
+      | 5 -> Sub {dst;src}
+      | 7 -> Cmp {dst;src}
+      | _ -> failwith "unknown operation"
+    else if (b1 land 0b11111100) lxor 0b10000000 = 0 then
+      let dst,src,b2 = imm_to_reg_or_mem b1 stream in
+      match (b2 land 0b00111000) lsr 3 with
+      | 0 -> Add {dst;src}
+      | 5 -> Sub {dst;src}
+      | 7 -> Cmp {dst;src}
+      | _ -> failwith "unknown operation"
+    else if (b1 land 0b11000110) lxor 0b00000100 = 0 then
+      let w = b1 land 0b00000001 > 0 in
+      let data = displacement ~signed:true stream (if w then 2 else 1) in
+      let dst,src = Register (A X), Immediate (data,w) in
+      match (b1 land 0b00111000) lsr 3 with
+      | 0 -> Add {dst;src}
+      | 5 -> Sub {dst;src}
+      | 7 -> Cmp {dst;src}
+      | _ -> failwith "unknown operation"
     else
       failwith "unknown opcode"
 
@@ -181,15 +219,30 @@ module Inst = struct
     loop loc;
     Buffer.to_bytes buf |> Bytes.to_string
 
-  let to_string = function
-    | Mov {src;dst} ->
-      let buf = Buffer.create 0 in
-      Buffer.add_string buf "mov ";
+  let add_registers buf dst src =
       Buffer.add_string buf (location_to_string dst);
       Buffer.add_string buf ", ";
       (match dst,src with
-      | Plus _, Immediate (_,w) -> Buffer.add_string buf (if w then "word " else "byte ")
-      | _ -> ());
-      Buffer.add_string buf (location_to_string src);
-      Buffer.to_bytes buf |> String.of_bytes
+       | (Plus _ | Address _), Immediate (_,w) -> Buffer.add_string buf (if w then "word " else "byte ")
+       | _ -> ());
+      Buffer.add_string buf (location_to_string src)
+
+  let to_string inst =
+    let buf = Buffer.create 0 in
+    let () = match inst with
+    | Mov {dst;src} ->
+      Buffer.add_string buf "mov ";
+      add_registers buf dst src
+    | Add {dst;src} ->
+      Buffer.add_string buf "add ";
+      add_registers buf dst src
+    | Sub {dst;src} ->
+      Buffer.add_string buf "sub ";
+      add_registers buf dst src
+    | Cmp {dst;src} ->
+      Buffer.add_string buf "cmp ";
+      add_registers buf dst src
+      
+    in
+    Buffer.to_bytes buf |> String.of_bytes
 end
