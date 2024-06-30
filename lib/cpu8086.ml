@@ -100,27 +100,65 @@ module Registers = struct
     Printf.printf "di: %s\n" @@ Register.to_string t.di;
 end
 
+module Flags = struct
+  type t = {
+    sign: bool;
+    zero: bool
+  }
+
+  let to_string t =
+    (if t.sign then "S" else "") ^
+    (if t.zero then "Z" else "")
+
+  let default = {sign=false; zero=false}
+
+  let flags v = {zero=v=0; sign=(0x8000 land v) > 0}
+end
+
 module CPU = struct
   type register = int
   type t = {
     inst: Inst.t Seq.t;
     registers: Registers.t;
+    flags: Flags.t;
   }
 
   let start stream = {
     inst=Inst.of_stream stream;
-    registers=Registers.zero
+    registers=Registers.zero;
+    flags=Flags.default
   }
 
   let diff_state p1 p2 =
     Registers.diff p1.registers p2.registers
 
+  let flags t = t.flags
+
+  let value loc t =
+    match loc with
+    | Inst.Register reg -> Registers.get reg t.registers
+    | Inst.Immediate (v,_) -> v
+    | Inst.Address _ | Inst.Plus (_, _) -> failwith "not implemented"
+
+  let sign v = v land 0x8000 > 0
   let handle instruction t =
     match instruction with
-    | Inst.Mov {dst=Inst.Register dst;src = Inst.Register src} ->
-      let value = Registers.get src t.registers in
+    | Inst.Mov {dst=Inst.Register dst;src} ->
+      let value = value src t in
       {t with registers=Registers.set dst value t.registers}
-    | Inst.Mov {dst=Inst.Register dst;src = Inst.Immediate (v,_)} ->
-      {t with registers=Registers.set dst v t.registers}
-    | _ -> failwith "not imeplemented"
+    | Inst.Cmp {dst; src} ->
+      let v = value dst t - value src t in
+      {t with flags=Flags.flags v}
+    | Inst.Sub {dst=(Inst.Register dst_reg as dst) ; src} ->
+      let v = value dst t - value src t in
+      {t with registers=Registers.set dst_reg v t.registers;
+              flags=Flags.flags v}
+    | Inst.Add {dst=(Inst.Register dst_reg as dst) ; src} ->
+      let v = value dst t + value src t in
+      {t with registers=Registers.set dst_reg v t.registers;
+              flags=Flags.flags v}
+
+    | _ ->
+      let str = Printf.sprintf "execution of '%s' not implemented" (Inst.to_string instruction) in
+      failwith str
 end

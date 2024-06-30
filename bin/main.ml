@@ -15,8 +15,14 @@ let exec stream =
     match seq () with
     | Seq.Cons (inst, tl) ->
       let next = CPU.handle inst cpu in
+      let old_flags, new_flags = Flags.to_string cpu.CPU.flags, Flags.to_string next.CPU.flags in
       let diff = CPU.diff_state cpu next in
-      Printf.printf "%s ; %s\n" (Inst.to_string inst) (Registers.diff_to_string diff);
+      Printf.printf "%s ; %s"
+        (Inst.to_string inst)
+        (Registers.diff_to_string diff);
+      if old_flags <> new_flags
+      then Printf.printf " || Flags: %s->%s\n" old_flags new_flags
+      else Printf.printf "\n";
       loop tl next
     | Seq.Nil -> cpu
   in
