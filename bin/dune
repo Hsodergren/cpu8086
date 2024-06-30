@@ -1,4 +1,4 @@
 (executable
  (public_name cpu8086)
  (name main)
- (libraries cpu8086))
+ (libraries cpu8086 cmdliner))
