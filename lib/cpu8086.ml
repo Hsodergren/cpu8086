@@ -116,15 +116,16 @@ module Flags = struct
 end
 
 module CPU = struct
-  type register = int
   type t = {
-    inst: Inst.t Seq.t;
+    stream: Bytestream.t;
+    memory: Bytes.t;
     registers: Registers.t;
     flags: Flags.t;
   }
 
   let start stream = {
-    inst=Inst.of_stream stream;
+    stream=stream;
+    memory=Bytes.create (1024 * 1024);
     registers=Registers.zero;
     flags=Flags.default
   }
@@ -134,30 +135,54 @@ module CPU = struct
 
   let flags t = t.flags
 
+  let rec address addr t =
+    match addr with
+    | Inst.Reg label -> Registers.get label t.registers
+    | Addr v -> v
+    | Plus (a1,a2) -> address a1 t + address a2 t
+
   let value loc t =
     match loc with
     | Inst.Register reg -> Registers.get reg t.registers
     | Inst.Immediate (v,_) -> v
-    | Inst.Address _ -> failwith "not implemented"
+    | Inst.Address v ->
+       let addr = address v t in
+       Bytes.get_uint16_ne t.memory addr
+
+  let store loc v t =
+    match loc with
+    | Inst.Register reg -> {t with registers=Registers.set reg v t.registers}
+    | Address addr ->
+       let addr = address addr t in
+       Bytes.set_uint16_ne t.memory addr v;
+       t
+    | Immediate _ -> failwith "cannot store value in immediate"
+    
+  let jump_if pred v t =
+    if pred then Bytestream.move v t.stream;
+    t
 
   let sign v = v land 0x8000 > 0
   let handle instruction t =
     match instruction with
-    | Inst.Mov {dst=Inst.Register dst;src} ->
+    | Inst.Mov {dst;src} ->
       let value = value src t in
-      {t with registers=Registers.set dst value t.registers}
+      store dst value t
     | Inst.Cmp {dst; src} ->
       let v = value dst t - value src t in
       {t with flags=Flags.flags v}
-    | Inst.Sub {dst=(Inst.Register dst_reg as dst) ; src} ->
+    | Inst.Sub {dst; src} ->
       let v = value dst t - value src t in
-      {t with registers=Registers.set dst_reg v t.registers;
-              flags=Flags.flags v}
-    | Inst.Add {dst=(Inst.Register dst_reg as dst) ; src} ->
+      let t = store dst v t in
+      {t with flags=Flags.flags v}
+    | Inst.Add {dst; src} ->
       let v = value dst t + value src t in
-      {t with registers=Registers.set dst_reg v t.registers;
-              flags=Flags.flags v}
-
+      let t = store dst v t in
+      {t with flags=Flags.flags v}
+    | Jne v -> jump_if (not t.flags.zero) v t
+    | Je v -> jump_if t.flags.zero v t
+    | Jns v -> jump_if (not t.flags.sign) v t
+    | Js v -> jump_if t.flags.sign v t
     | _ ->
       let str = Printf.sprintf "execution of '%s' not implemented" (Inst.to_string instruction) in
       failwith str

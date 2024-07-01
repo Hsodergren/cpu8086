@@ -7,7 +7,7 @@ let of_bytes bytes =
   {buf=bytes;
    pos=0}
 
-let of_file file = 
+let of_file file =
   let buf = Buffer.create 0 in
   In_channel.with_open_bin file (fun inc ->
       let rec loop () =
@@ -41,3 +41,5 @@ let take t n =
     buf
   end else
     raise Not_found
+
+let move v t = t.pos <- t.pos + v
