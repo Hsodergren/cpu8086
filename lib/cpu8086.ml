@@ -141,7 +141,7 @@ module CPU = struct
     | Addr v -> v
     | Plus (a1,a2) -> address a1 t + address a2 t
 
-  let value loc t =
+  let load loc t =
     match loc with
     | Inst.Register reg -> Registers.get reg t.registers
     | Inst.Immediate (v,_) -> v
@@ -163,20 +163,21 @@ module CPU = struct
     t
 
   let sign v = v land 0x8000 > 0
+
   let handle instruction t =
     match instruction with
     | Inst.Mov {dst;src} ->
-      let value = value src t in
+      let value = load src t in
       store dst value t
     | Inst.Cmp {dst; src} ->
-      let v = value dst t - value src t in
+      let v = load dst t - load src t in
       {t with flags=Flags.flags v}
     | Inst.Sub {dst; src} ->
-      let v = value dst t - value src t in
+      let v = load dst t - load src t in
       let t = store dst v t in
       {t with flags=Flags.flags v}
     | Inst.Add {dst; src} ->
-      let v = value dst t + value src t in
+      let v = load dst t + load src t in
       let t = store dst v t in
       {t with flags=Flags.flags v}
     | Jne v -> jump_if (not t.flags.zero) v t
