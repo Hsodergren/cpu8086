@@ -1,0 +1,6 @@
+# dune init proj haversine
+# OCAMLPARAM: unset
+# Shared cache: disabled
+# Shared cache location: /home/stheso/.cache/dune/db
+# Workspace root: /home/stheso/programming/perfaware/cpu8086/haversine
+# Auto-detected concurrency: 24
