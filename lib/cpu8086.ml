@@ -138,7 +138,7 @@ module CPU = struct
     match loc with
     | Inst.Register reg -> Registers.get reg t.registers
     | Inst.Immediate (v,_) -> v
-    | Inst.Address _ | Inst.Plus (_, _) -> failwith "not implemented"
+    | Inst.Address _ -> failwith "not implemented"
 
   let sign v = v land 0x8000 > 0
   let handle instruction t =

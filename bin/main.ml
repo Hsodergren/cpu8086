@@ -1,6 +1,5 @@
 open Cpu8086
 
-
 let rec disassemble stream =
   try
     let inst = Inst.parse stream in

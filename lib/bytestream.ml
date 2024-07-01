@@ -6,8 +6,8 @@ type t = {
 let of_bytes bytes =
   {buf=bytes;
    pos=0}
-  
-let of_file file =
+
+let of_file file = 
   let buf = Buffer.create 0 in
   In_channel.with_open_bin file (fun inc ->
       let rec loop () =
@@ -18,12 +18,12 @@ let of_file file =
       loop ()
     );
   of_bytes @@  Buffer.to_bytes buf
-    
+
 let take1 ?(signed=true) t =
   if t.pos < Bytes.length t.buf
   then begin
     let res =
-      if signed 
+      if signed
       then Bytes.get_int8 t.buf t.pos
       else Bytes.get_uint8 t.buf t.pos
     in
@@ -31,7 +31,7 @@ let take1 ?(signed=true) t =
     res
   end else
     raise Not_found
-      
+
 let take t n =
   let buf = Bytes.create n in
   if t.pos + n <= Bytes.length t.buf
