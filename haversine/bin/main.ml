@@ -33,7 +33,7 @@ let file =
   let doc = "output file" in
   let docv = "FILE" in
   Arg.(value @@ opt string "-" @@ info ~doc ~docv ["f"; "file"])
-    
+
 
 let[@inline] gen_point cx cy dx dy state =
   let dx2 = dx /. 2. in
@@ -41,14 +41,18 @@ let[@inline] gen_point cx cy dx dy state =
   let x1 = Random.State.float state dx -. dx2 +. cx in
   let y1 = Random.State.float state dy -. dy2 +. cy in
   (x1,y1)
-  
+
 let[@inline] gen_line cx cy dx dy state =
   let p1 = gen_point cx cy dx dy state in
   let p2 = gen_point cx cy dx dy state in
   Haversine.Line.v p1 p2
-  
+
+let avg fs =
+  let sum,len = List.fold_left (fun (sum,len) f -> f +. sum, len+1) (0.,0) fs in
+  sum /. float len
+
 let gen_f seed uniform lines file  =
-  let lines = 
+  let lines =
     match uniform with
     | Uniform ->
       List.init lines (fun _ -> gen_line 0. 0. 360. 180. seed )
@@ -66,13 +70,28 @@ let gen_f seed uniform lines file  =
         ) regions
   in
   let json = `List (List.map Haversine.Line.to_yojson lines) in
-  let sum,len = List.fold_left (fun (sum,len) f -> Haversine.Line.haversine f +. sum, len+1) (0.,0) lines in
-  Printf.printf "Avg: %f\n" (sum /. float len);
+  let haversines = List.map Haversine.Line.haversine lines in
+  let avg = avg haversines in
+  Printf.printf "Avg: %f\n" avg;
   if file = "-"
   then Yojson.Safe.pretty_to_channel stdout json
-  else Yojson.Safe.to_file file json
-    
-  
+  else begin
+    let bytes =
+      let buf = Buffer.create 0 in
+      List.iter (fun f ->
+          let i = Int64.bits_of_float f in
+          Buffer.add_int64_ne buf i
+        ) haversines;
+      Buffer.add_int64_ne buf (Int64.bits_of_float avg);
+      Buffer.to_bytes buf
+    in
+    Yojson.Safe.to_file file json;
+    Out_channel.with_open_bin (file ^ ".answer") (fun oc ->
+        Out_channel.output_bytes oc bytes
+      )
+  end
+
+
 let gen_cmd = Cmd.v (Cmd.info "gen") Term.(const gen_f $ seed $ gen_method $ lines $ file)
 let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd]
 let () = ignore @@ Cmd.eval cmd
