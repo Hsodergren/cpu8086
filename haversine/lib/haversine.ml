@@ -4,6 +4,9 @@ module Point = struct
   type t = float * float
 end
 
+external rdtsc : unit -> int = "rdtsc"
+external add : int -> int -> int = "add"
+
 module Line = struct
   type t = {
       p1: Point.t;

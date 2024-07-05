@@ -160,12 +160,19 @@ let calc_f f validation =
       ) validation
   | _ -> failwith "needs to be array"
 
+let test () =
+  let a = Haversine.rdtsc () in
+  let b = Haversine.rdtsc () in
+  Printf.printf "%d\n" (a);
+  Printf.printf "%d\n" (b);
+  Printf.printf "%d\n" (b-a)
 
 let gen_cmd = Cmd.v (Cmd.info "gen") Term.(const gen_f $ seed $ gen_method $ lines $ file)
 let json_cmd = Cmd.v (Cmd.info "json_lex") Term.(const lex_json $ in_file)
 let json_parse_cmd = Cmd.v (Cmd.info "json_parse") Term.(const parse_json $ in_file)
 let calc_hav_cmd = Cmd.v (Cmd.info "calc") Term.(const calc_f $ in_file $ validation)
+let test_cmd = Cmd.v (Cmd.info "test") Term.(const test $ Term.const ())
 
-let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd; calc_hav_cmd]
+let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd; calc_hav_cmd; test_cmd]
 
 let () = ignore @@ Cmd.eval cmd

@@ -1,5 +1,4 @@
 (executable
  (public_name haversine)
  (name main)
- (libraries haversine cmdliner yojson)
- (preprocess (pps ppx_deriving.show)))
+ (libraries haversine cmdliner yojson))

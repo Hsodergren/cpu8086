@@ -1,3 +1,4 @@
 (library
  (name haversine)
+ (foreign_stubs (language c) (names timing))
  (preprocess (pps ppx_deriving.show)))
