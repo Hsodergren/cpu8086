@@ -34,6 +34,11 @@ let file =
   let docv = "FILE" in
   Arg.(value @@ opt string "-" @@ info ~doc ~docv ["f"; "file"])
 
+let validation =
+  let doc = "validation bin file" in
+  let docv = "FILE" in
+  Arg.(value @@ opt (some file) None @@ info ~doc ~docv ["v"; "validation"])
+
 let in_file =
   let doc = "input file" in
   let docv = "FILE" in
@@ -51,6 +56,10 @@ let[@inline] gen_line cx cy dx dy state =
   let p1 = gen_point cx cy dx dy state in
   let p2 = gen_point cx cy dx dy state in
   Haversine.Line.v p1 p2
+
+let avg_arr fs =
+  let sum,len = Array.fold_left (fun (sum,len) f -> f +. sum, len+1) (0.,0) fs in
+  sum /. float len
 
 let avg fs =
   let sum,len = List.fold_left (fun (sum,len) f -> f +. sum, len+1) (0.,0) fs in
@@ -115,8 +124,48 @@ let parse_json f =
   let o = Haversine.Json.parse content in
   Format.printf "%a" Haversine.Json.pp o
 
+let read_bin_file f points =
+  let buf = Bytes.create 8 in
+  let read_float ic =
+    In_channel.really_input ic buf 0 8
+    |> Option.map (fun () -> Bytes.get_int64_ne buf 0 |> Int64.float_of_bits)
+  in
+  let arr = Array.make points 0. in
+  let avg = ref 0. in
+  let () = In_channel.with_open_bin f (fun ic ->
+      for i = 0 to points - 1 do
+        Array.set arr i (read_float ic |> Option.get)
+      done;
+      avg := read_float ic |> Option.get
+    )
+  in
+  arr,avg
+
+let calc_f f validation =
+  let content = In_channel.with_open_bin f In_channel.input_all in
+  let json = Haversine.Json.parse content in
+  match json with
+  | Haversine.Json.Arr l ->
+    let dists = Array.map (fun json -> Haversine.Line.of_json json |> Haversine.Line.haversine) l in
+    let avg = avg_arr dists in
+    Printf.printf "Input size: %d\n" (String.length content);
+    Printf.printf "Pair count: %d\n" (Array.length dists);
+    Printf.printf "Avg: %f\n" avg;
+
+    Option.iter (fun f ->
+        let hav, _ = read_bin_file f (Array.length dists) in
+        let ref_avg = avg_arr hav in
+        Printf.printf "Reference Avg: %f\n" ref_avg;
+        Printf.printf "Difference: %f\n" (avg -. ref_avg)
+      ) validation
+  | _ -> failwith "needs to be array"
+
+
 let gen_cmd = Cmd.v (Cmd.info "gen") Term.(const gen_f $ seed $ gen_method $ lines $ file)
 let json_cmd = Cmd.v (Cmd.info "json_lex") Term.(const lex_json $ in_file)
 let json_parse_cmd = Cmd.v (Cmd.info "json_parse") Term.(const parse_json $ in_file)
-let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd]
+let calc_hav_cmd = Cmd.v (Cmd.info "calc") Term.(const calc_f $ in_file $ validation)
+
+let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd; calc_hav_cmd]
+
 let () = ignore @@ Cmd.eval cmd

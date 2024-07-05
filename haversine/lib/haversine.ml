@@ -14,6 +14,15 @@ module Line = struct
 
   let to_yojson {p1=(x0,y0);p2=(x1,y1)} =
     `Assoc ["x0",`Float x0;"y0",` Float y0;"x1",`Float x1; "y1", `Float y1]
+
+  let of_json o =
+    let x0 = Json.member_exn "x0" o |> Json.float in
+    let x1 = Json.member_exn "x1" o |> Json.float in
+    let y0 = Json.member_exn "y0" o |> Json.float in
+    let y1 = Json.member_exn "y1" o |> Json.float in
+    { p1=(x0,y0);p2=(x1,y1) }
+
+
   let square x = x *. x
                  
   let to_radians =

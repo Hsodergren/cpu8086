@@ -74,8 +74,8 @@ module Lexer = struct
 end
 
 type t =
-  | Obj of (string * t) list
-  | Arr of t list
+  | Obj of (string * t) array
+  | Arr of t array
   | Num of float
   | Str of string [@@deriving show]
 
@@ -98,9 +98,8 @@ let parse string =
       | _ -> failwith "obj syntax error 2"
     in
     let lex = Lexer.lex lexer in
-    Format.printf "%a" Lexer.pp_token (Option.get lex);
     match lex with
-    | Some Lexer.RightBrace -> Obj (List.rev acc)
+    | Some Lexer.RightBrace -> Obj (List.rev acc |> Array.of_list)
     | Some Lexer.Comma -> obj_parse acc
     | Some (Lexer.String str) ->
        let o = obj () in
@@ -109,7 +108,7 @@ let parse string =
     | None -> raise End_of_file
   and list_parse acc =
     match Lexer.lex_peek lexer with
-    | Some Lexer.RightBracket -> ignore (Lexer.lex lexer); Arr (List.rev acc)
+    | Some Lexer.RightBracket -> ignore (Lexer.lex lexer); Arr (List.rev acc |> Array.of_list)
     | Some Lexer.Comma -> ignore (Lexer.lex lexer); list_parse acc
     | Some _ ->
        let o = json_parse () in
@@ -119,3 +118,14 @@ let parse string =
   json_parse ()
   
 
+let member key t =
+  match t with
+  | Obj l -> Array.find_map (fun (k,v) -> if k = key then Some v else None ) l
+  | _ -> failwith "needs to be an obj"
+
+let member_exn key t =
+  member key t |> Option.get
+
+let float = function
+  | Num f -> f
+  | _ -> failwith "needs to be a float"
