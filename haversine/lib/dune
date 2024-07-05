@@ -1,2 +1,3 @@
 (library
- (name haversine))
+ (name haversine)
+ (preprocess (pps ppx_deriving.show)))

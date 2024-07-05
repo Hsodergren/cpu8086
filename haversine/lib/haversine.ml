@@ -1,3 +1,4 @@
+module Json = Json
 
 module Point = struct
   type t = float * float

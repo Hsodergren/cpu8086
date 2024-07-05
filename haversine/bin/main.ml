@@ -34,6 +34,11 @@ let file =
   let docv = "FILE" in
   Arg.(value @@ opt string "-" @@ info ~doc ~docv ["f"; "file"])
 
+let in_file =
+  let doc = "input file" in
+  let docv = "FILE" in
+  Arg.(required @@ opt (some file) None @@ info ~doc ~docv ["i"; "file"])
+
 
 let[@inline] gen_point cx cy dx dy state =
   let dx2 = dx /. 2. in
@@ -91,7 +96,27 @@ let gen_f seed uniform lines file  =
       )
   end
 
+let lex_json f =
+  let content = In_channel.with_open_bin f In_channel.input_all in
+  print_endline content;
+  let lexer = Haversine.Json.Lexer.v content in
+  let rec loop lex =
+    match Haversine.Json.Lexer.lex lexer with
+    | Some token ->
+      Format.printf "%a@ %!" Haversine.Json.Lexer.pp_token token;
+      loop lex
+    | None -> print_endline "EOF"
+  in
+  loop lexer
+
+let parse_json f =
+  let content = In_channel.with_open_bin f In_channel.input_all in
+  print_endline content;
+  let o = Haversine.Json.parse content in
+  Format.printf "%a" Haversine.Json.pp o
 
 let gen_cmd = Cmd.v (Cmd.info "gen") Term.(const gen_f $ seed $ gen_method $ lines $ file)
-let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd]
+let json_cmd = Cmd.v (Cmd.info "json_lex") Term.(const lex_json $ in_file)
+let json_parse_cmd = Cmd.v (Cmd.info "json_parse") Term.(const parse_json $ in_file)
+let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd]
 let () = ignore @@ Cmd.eval cmd
