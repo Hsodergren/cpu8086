@@ -133,6 +133,7 @@ module CPU = struct
   let diff_state p1 p2 =
     Registers.diff p1.registers p2.registers
 
+  let ip t = t.stream.Bytestream.pos
   let flags t = t.flags
 
   let rec address addr t =
@@ -157,7 +158,7 @@ module CPU = struct
        Bytes.set_uint16_ne t.memory addr v;
        t
     | Immediate _ -> failwith "cannot store value in immediate"
-    
+
   let jump_if pred v t =
     if pred then Bytestream.move v t.stream;
     t

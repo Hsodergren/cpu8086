@@ -11,14 +11,17 @@ let rec disassemble stream =
 let exec stream =
   let seq = Inst.of_stream stream in
   let rec loop seq cpu =
+    let pre_ip = CPU.ip cpu in
     match seq () with
     | Seq.Cons (inst, tl) ->
       let next = CPU.handle inst cpu in
+      let cur_ip = CPU.ip next in
       let old_flags, new_flags = Flags.to_string cpu.CPU.flags, Flags.to_string next.CPU.flags in
       let diff = CPU.diff_state cpu next in
       Printf.printf "%s ; %s"
         (Inst.to_string inst)
         (Registers.diff_to_string diff);
+      Printf.printf " ip:0x%02X->0x%02X" pre_ip cur_ip;
       if old_flags <> new_flags
       then Printf.printf " || Flags: %s->%s\n" old_flags new_flags
       else Printf.printf "\n";
@@ -28,7 +31,8 @@ let exec stream =
   let final_state = loop seq (CPU.start stream) in
   print_endline "\nFINAL STATE";
   print_endline "===========";
-  Registers.print final_state.CPU.registers
+  Registers.print final_state.CPU.registers;
+  Printf.printf "ip: 0x%04X\n" (CPU.ip final_state)
 
 open Cmdliner
 
