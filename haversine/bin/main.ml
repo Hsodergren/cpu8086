@@ -155,7 +155,7 @@ let calc_f f validation =
     Option.iter (fun f ->
         let hav, _ = read_bin_file f (Array.length dists) in
         let ref_avg = avg_arr hav in
-        Printf.printf "Reference Avg: %f\n" ref_avg;
+        Printf.printf "\nReference Avg: %f\n" ref_avg;
         Printf.printf "Difference: %f\n" (avg -. ref_avg)
       ) validation
   | _ -> failwith "needs to be array"

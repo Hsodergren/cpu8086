@@ -32,6 +32,7 @@ module Lexer = struct
       | Some '\\' -> begin
           match get t with
           | Some '\\' -> Buffer.add_char buf '\\'; aux t
+          | Some '"' -> Buffer.add_char buf '"'; aux t
           | Some 'n' -> Buffer.add_char buf '\n'; aux t
           | Some 't' -> Buffer.add_char buf '\t'; aux t
           | Some _ -> failwith "invalid escaped string"
