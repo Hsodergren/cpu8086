@@ -15,7 +15,7 @@ module Lexer = struct
     | RightBracket [@@deriving show]
 
   let v buf = {buf;pos=0}
-      
+
   let[@inline] advance t = t.pos <- t.pos +1
   let[@inline] peek t =
     if t.pos < String.length t.buf then
@@ -43,13 +43,13 @@ module Lexer = struct
     in
     aux t
 
-  let (let*) = Option.bind 
+  let (let*) = Option.bind
 
   let float t =
     let buf = Buffer.create 0 in
     let rec loop t =
       match peek t with
-      | Some ('0'..'9' | '.' | '-' as c) -> advance t; Buffer.add_char buf c; loop t
+      | Some ('0'..'9' | 'e' | '.' | '-' as c) -> advance t; Buffer.add_char buf c; loop t
       | Some _ -> Some ()
       | None -> None
     in
@@ -89,7 +89,7 @@ let parse string =
     | Some Lexer.String str -> Str str
     | Some Lexer.Float float -> Num float
     | Some _ -> failwith "syntax error"
-    | None -> raise End_of_file 
+    | None -> raise End_of_file
   and obj_parse acc =
     let obj () =
       match Lexer.lex lexer with
@@ -117,7 +117,7 @@ let parse string =
     | None -> raise End_of_file
   in
   json_parse ()
-  
+
 
 let member key t =
   match t with

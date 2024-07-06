@@ -1,4 +1,6 @@
 (library
  (name haversine)
+ (libraries unix)
+ (ocamlopt_flags -S)
  (foreign_stubs (language c) (names timing))
  (preprocess (pps ppx_deriving.show)))

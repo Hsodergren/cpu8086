@@ -1,4 +1,3 @@
-(executable
- (public_name haversine)
- (name main)
+(executables
+ (names main main2)
  (libraries haversine cmdliner yojson))

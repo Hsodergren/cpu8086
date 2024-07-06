@@ -4,8 +4,64 @@ module Point = struct
   type t = float * float
 end
 
-external rdtsc : unit -> int = "rdtsc"
-external add : int -> int -> int = "add"
+module Timing = struct
+  let getosfreq = 1000000
+
+
+  external gettimeofday : unit -> (int * int) = "my_gettimeofday"
+  external rdtsc : unit -> int = "rdtsc" [@@noalloc]
+  external add : int -> int -> int = "add"
+
+  let ostimerfreq = 1_000_000
+  let ostimer () =
+    let sec,usec = gettimeofday () in
+    sec*ostimerfreq + usec
+
+  let estimate_cycles ms =
+    let start = ostimer () in
+    let cpustart = rdtsc () in
+    let end' = ref 0 in
+    let elapsed = ref 0 in
+    let c = 1. /. 1000. *. float ms in
+    while (float !elapsed < float getosfreq *. c) do
+      end' := ostimer ();
+      elapsed := !end' - start;
+    done;
+    let cpuend = rdtsc () in
+    int_of_float @@ float (cpuend - cpustart) /. c
+    
+  module Prof = struct
+    let profs = ref []
+        
+    let print tot =
+      List.iter (fun (name, c) ->
+          Printf.printf "  %s: %d (%.2f%%)\n" name c (float c /. float tot *. 100.)
+        ) (List.rev !profs)
+
+
+    let prof name f =
+      let start = rdtsc () in
+      let res = f () in
+      let end' = rdtsc () in
+      profs := (name,(end'-start))::!profs;
+      res
+
+    let prof1 name f arg = prof name (fun () -> f arg)
+
+    let prof2 name f arg1 arg2  = prof name (fun () -> f arg1 arg2)
+
+    let main f =
+      let start = rdtsc () in
+      let res = f () in
+      let end' = rdtsc () in
+      let cycles_p_s = estimate_cycles 10 in
+      let tot_cycles = end'-start in
+      Printf.printf "main took %d (%f seconds)\n" tot_cycles (float tot_cycles /. float cycles_p_s);
+      print tot_cycles;
+      profs := [];
+      res
+  end
+end
 
 module Line = struct
   type t = {
@@ -27,7 +83,7 @@ module Line = struct
 
 
   let square x = x *. x
-                 
+
   let to_radians =
     let c = Float.pi /. 180. in
     fun deg -> c *. deg

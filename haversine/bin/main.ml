@@ -107,7 +107,6 @@ let gen_f seed uniform lines file  =
 
 let lex_json f =
   let content = In_channel.with_open_bin f In_channel.input_all in
-  print_endline content;
   let lexer = Haversine.Json.Lexer.v content in
   let rec loop lex =
     match Haversine.Json.Lexer.lex lexer with
@@ -120,7 +119,6 @@ let lex_json f =
 
 let parse_json f =
   let content = In_channel.with_open_bin f In_channel.input_all in
-  print_endline content;
   let o = Haversine.Json.parse content in
   Format.printf "%a" Haversine.Json.pp o
 
@@ -142,37 +140,48 @@ let read_bin_file f points =
   arr,avg
 
 let calc_f f validation =
-  let content = In_channel.with_open_bin f In_channel.input_all in
-  let json = Haversine.Json.parse content in
-  match json with
-  | Haversine.Json.Arr l ->
-    let dists = Array.map (fun json -> Haversine.Line.of_json json |> Haversine.Line.haversine) l in
-    let avg = avg_arr dists in
-    Printf.printf "Input size: %d\n" (String.length content);
-    Printf.printf "Pair count: %d\n" (Array.length dists);
-    Printf.printf "Avg: %f\n" avg;
-
-    Option.iter (fun f ->
-        let hav, _ = read_bin_file f (Array.length dists) in
-        let ref_avg = avg_arr hav in
-        Printf.printf "\nReference Avg: %f\n" ref_avg;
-        Printf.printf "Difference: %f\n" (avg -. ref_avg)
-      ) validation
-  | _ -> failwith "needs to be array"
+  let open Haversine in
+  let module P = Timing.Prof in
+  Timing.Prof.main (fun () ->
+      let content = P.prof2 "Read file" In_channel.with_open_bin f In_channel.input_all in
+      let json = P.prof1 "Parse json" Json.parse content in
+      match json with
+      | Json.Arr l ->
+        let dists = P.prof2 "Calculate haversines" Array.map (fun json -> Line.of_json json |> Line.haversine) l in
+        let avg = P.prof1 "Calculate averages" avg_arr dists in
+        Printf.printf "Input size: %d\n" (String.length content);
+        Printf.printf "Pair count: %d\n" (Array.length dists);
+        Printf.printf "Avg: %f\n" avg;
+        
+        Option.iter (fun f ->
+            let hav, _ = P.prof2 "read_binary file" read_bin_file f (Array.length dists) in
+            let ref_avg = avg_arr hav in
+            Printf.printf "\nReference Avg: %f\n" ref_avg;
+            Printf.printf "Difference: %f\n" (avg -. ref_avg)
+          ) validation;
+      | _ -> failwith "needs to be array"
+    )
 
 let test () =
-  let a = Haversine.rdtsc () in
-  let b = Haversine.rdtsc () in
-  Printf.printf "%d\n" (a);
-  Printf.printf "%d\n" (b);
-  Printf.printf "%d\n" (b-a)
+  let open Haversine in
+  let a = Timing.rdtsc () in
+  let b = Timing.rdtsc () in
+  Printf.printf "rdtsc %d\n" (b-a);
+  Printf.printf "cycles %d\n" (Timing.estimate_cycles 1000);
+  Printf.printf "cycles %d\n" (Timing.estimate_cycles 10);
+  Printf.printf "cycles %d\n" (Timing.estimate_cycles 1)
+
 
 let gen_cmd = Cmd.v (Cmd.info "gen") Term.(const gen_f $ seed $ gen_method $ lines $ file)
-let json_cmd = Cmd.v (Cmd.info "json_lex") Term.(const lex_json $ in_file)
-let json_parse_cmd = Cmd.v (Cmd.info "json_parse") Term.(const parse_json $ in_file)
+let json_cmd =
+  let lex_cmd = Cmd.v (Cmd.info "lex") Term.(const lex_json $ in_file) in
+  let parse_cmd = Cmd.v (Cmd.info "parse") Term.(const parse_json $ in_file) in
+  Cmd.group (Cmd.info "json") [lex_cmd;parse_cmd]
+
 let calc_hav_cmd = Cmd.v (Cmd.info "calc") Term.(const calc_f $ in_file $ validation)
+
 let test_cmd = Cmd.v (Cmd.info "test") Term.(const test $ Term.const ())
 
-let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; json_parse_cmd; calc_hav_cmd; test_cmd]
+let cmd = Cmd.group (Cmd.info "haversine") [gen_cmd; json_cmd; calc_hav_cmd; test_cmd]
 
 let () = ignore @@ Cmd.eval cmd
